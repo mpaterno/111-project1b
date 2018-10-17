@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <termios.h>
 #include <getopt.h>
@@ -26,6 +27,8 @@ int portNumber = 0;
 char *logFile = NULL;
 char *host = NULL;
 char *fileToEncrypt = NULL;
+int logFlag = 0;
+int logfd = -1;
 char crlf[2] = {'\r', '\n'};
 
 pid_t pid;
@@ -33,33 +36,6 @@ extern int errno;
 int sockfd, n;
 struct sockaddr_in serv_addr;
 struct hostent *server;
-
-void defaultio()
-{
-  char buffer[256];
-  int readSize = read(STDIN_FILENO, buffer, sizeof(char) * 256);
-  while (readSize)
-  {
-    int i = 0;
-    while (i < readSize)
-    {
-      char current = buffer[i];
-      if (current == '\r' || current == '\n')
-        write(STDOUT_FILENO, crlf, 2 * sizeof(char));
-      else if (current == '\4')
-        exit(0);
-      else
-        write(STDOUT_FILENO, &buffer[i], sizeof(char));
-      i++;
-    }
-    readSize = read(STDIN_FILENO, buffer, sizeof(char) * 256);
-  }
-  if (readSize < 0)
-  {
-    fprintf(stderr, "ERROR: Bad non-shell read, error number: %s\n ", strerror(errno));
-    exit(1);
-  }
-}
 
 void initializePipes(int fd1[2], int fd2[2])
 {
@@ -80,116 +56,8 @@ void configurePollfd()
 {
   pollfds[0].fd = STDIN_FILENO;
   pollfds[0].events = POLLIN;
-  pollfds[1].fd = pipeToParent[0];
+  pollfds[1].fd = sockfd;
   pollfds[1].events = POLLIN | POLLHUP | POLLERR;
-}
-
-void shellio() // Sending 0 and 1
-{
-  close(pipeToChild[0]);  // Close Read End
-  close(pipeToParent[1]); // Close Write End
-  configurePollfd();
-
-  while (1)
-  {
-    char buffer[256];
-    int pollReturn = poll(pollfds, 2, 0);
-
-    if (pollReturn < 0)
-    {
-      fprintf(stderr, "ERROR: Bad poll creation, error number: %s\n ", strerror(errno));
-      exit(1);
-    }
-    else
-    {
-      if (pollfds[0].revents & POLLIN)
-      {
-        // Pipe input from keyboard to shell.
-        int readSize = read(STDIN_FILENO, buffer, sizeof(char) * 256);
-        if (readSize < 0)
-        {
-          fprintf(stderr, "ERROR: Bad from STDIN, error number: %s\n ", strerror(errno));
-          exit(1);
-        }
-
-        int i = 0;
-        while (i < readSize)
-        {
-          char current = buffer[i];
-          if (current == '\r' || current == '\n')
-          {
-            char n = '\n';
-            if (write(STDOUT_FILENO, crlf, 2 * sizeof(char)) < 0)
-              fprintf(stderr, "ERROR: Bad write to STDOUT, error number: %s\n ", strerror(errno));
-            write(pipeToChild[1], &n, sizeof(char));
-          }
-          else if (current == '\4')
-          {
-            close(pipeToChild[1]);
-            exit(0);
-          }
-          else if (current == '\3')
-            kill(pid, SIGINT);
-          else
-          {
-            write(STDOUT_FILENO, &buffer[i], sizeof(char));
-            write(pipeToChild[1], &buffer[i], sizeof(char));
-          }
-          i++;
-        }
-        if (readSize < 0)
-        {
-          fprintf(stderr, "ERROR: Unable to Read, error number: %s\n ", strerror(errno));
-          exit(1);
-        }
-      }
-      else if (pollfds[1].revents & POLLIN)
-      {
-        // Read From Shell
-        int readSize = read(pipeToParent[0], buffer, sizeof(char) * 256);
-        int i = 0;
-        if (readSize < 0)
-        {
-          fprintf(stderr, "ERROR: Bad read from shell, error number: %s\n ", strerror(errno));
-          exit(1);
-        }
-        while (i < readSize)
-        {
-          char current = buffer[i];
-          if (current == '\n' || current == '\r')
-            write(STDOUT_FILENO, crlf, 2 * sizeof(char));
-          else
-            write(STDOUT_FILENO, &buffer[i], sizeof(char));
-          i++;
-        }
-      }
-      else if (pollfds[1].revents & (POLLHUP | POLLERR))
-      {
-        fprintf(stderr, "ERROR: Poll error, error number: %s\n ", strerror(errno));
-        break;
-      }
-    }
-  }
-}
-
-void shellProcess()
-{
-  // Close Other Read and Write Ends
-  close(pipeToChild[1]);
-  close(pipeToParent[0]);
-  // Reassign file descriptors.
-  dup2(pipeToChild[0], 0);
-  dup2(pipeToParent[1], 1);
-  // Close non-copies.
-  close(pipeToChild[0]);
-  close(pipeToParent[1]);
-
-  char *args[2] = {shellProgram, NULL};
-  if (execvp(shellProgram, args) == -1)
-  { //execute shell
-    fprintf(stderr, "ERROR: Bad shell execution, error number: %s\n ", strerror(errno));
-    exit(1);
-  }
 }
 
 // Function runs at exit.
@@ -255,58 +123,144 @@ void createSocket()
   }
 }
 
-void writeToSocket()
+void logSent(char cur)
 {
+  char c = '\n';
+  write(logfd, "SENT 4 bytes: ", sizeof(char) * 14);
+  write(logfd, &cur, sizeof(char));
+  write(logfd, &c, sizeof(char));
+}
+
+void logReceived(char cur)
+{
+  char c = '\n';
+  write(logfd, "RECEIVED 4 bytes: ", sizeof(char) * 17);
+  write(logfd, &cur, sizeof(char));
+  write(logfd, &c, sizeof(char));
+}
+
+void newWriteSocket()
+{
+  configurePollfd();
+
   while (1)
   {
     char buffer[256];
-    int readSize = read(STDIN_FILENO, buffer, sizeof(char) * 256);
-    if (readSize < 0)
+    int pollReturn = poll(pollfds, 2, 0);
+
+    if (pollReturn < 0)
     {
-      fprintf(stderr, "ERROR: Bad from STDIN, error number: %s\n ", strerror(errno));
+      fprintf(stderr, "ERROR: Bad poll creation, error number: %s\n ", strerror(errno));
       exit(1);
     }
-    printf("In Here");
-    // Process Buffer
-    int i = 0;
-    while (i < readSize)
+    else
     {
-      char current = buffer[i];
-      if (current == '\r' || current == '\n')
+      if (pollfds[0].revents & POLLIN)
       {
-        char n = '\n';
-        if (write(STDOUT_FILENO, crlf, 2 * sizeof(char)) < 0)
-          fprintf(stderr, "ERROR: Bad write to STDOUT, error number: %s\n ", strerror(errno));
-        if (write(sockfd, &buffer[i], sizeof(char) < 0))
-          fprintf(stderr, "ERROR: Bad write to STDOUT, error number: %s\n ", strerror(errno));
+        // Pipe input from keyboard to shell.
+        int readSize = read(STDIN_FILENO, buffer, sizeof(char) * 256);
+        if (readSize < 0)
+        {
+          fprintf(stderr, "ERROR: Bad from STDIN, error number: %s\n ", strerror(errno));
+          exit(1);
+        }
+
+        int i = 0;
+        while (i < readSize)
+        {
+          char current = buffer[i];
+          if (logFlag)
+          {
+            logSent(current);
+          }
+          if (current == '\r' || current == '\n')
+          {
+            if (write(STDOUT_FILENO, crlf, 2 * sizeof(char)) < 0)
+            {
+              fprintf(stderr, "ERROR: Bad write to STDOUT, error number: %s\n ", strerror(errno));
+              exit(1);
+            }
+            if (write(sockfd, &buffer[i], sizeof(char)) < 0)
+            {
+              fprintf(stderr, "ERROR: Bad write to socket, error number: %s\n ", strerror(errno));
+              exit(1);
+            }
+          }
+          else if (current == '\4')
+          {
+            if (write(sockfd, &buffer[i], sizeof(char)) < 0)
+            {
+              fprintf(stderr, "ERROR: Bad write to socket, error number: %s\n ", strerror(errno));
+              exit(1);
+            }
+          }
+          else if (current == '\3')
+          {
+            if (write(sockfd, &buffer[i], sizeof(char)) < 0)
+            {
+              fprintf(stderr, "ERROR: Bad write to socket, error number: %s\n ", strerror(errno));
+              exit(1);
+            }
+          }
+          else
+          {
+            if (write(STDOUT_FILENO, &buffer[i], sizeof(char)) < 0)
+            {
+              fprintf(stderr, "ERROR: Bad write to STDOUT, error number: %s\n ", strerror(errno));
+              exit(1);
+            }
+            if (write(sockfd, &buffer[i], sizeof(char)) < 0)
+            {
+              fprintf(stderr, "ERROR: Bad write to socket, error number: %s\n ", strerror(errno));
+              exit(1);
+            }
+          }
+          i++;
+        }
+        if (readSize < 0)
+        {
+          fprintf(stderr, "ERROR: Unable to Read, error number: %s\n ", strerror(errno));
+          exit(1);
+        }
       }
-      else if (current == '\4')
+      else if (pollfds[1].revents & POLLIN)
       {
-        if (write(sockfd, &buffer[i], sizeof(char) < 0))
-          fprintf(stderr, "ERROR: Bad write to STDOUT, error number: %s\n ", strerror(errno));
+        // Read From Shell
+        int readSize = read(sockfd, buffer, sizeof(char) * 256);
+        int i = 0;
+        if (readSize < 0)
+        {
+          fprintf(stderr, "ERROR: Bad read from shell, error number: %s\n ", strerror(errno));
+          exit(1);
+        }
+        while (i < readSize)
+        {
+          char current = buffer[i];
+          if (logFlag)
+          {
+            logReceived(buffer[i]);
+          }
+          if (current == '\n' || current == '\r')
+          {
+            if (write(STDOUT_FILENO, crlf, 2 * sizeof(char)) < 0)
+              fprintf(stderr, "ERROR: Bad write to stdout, error number: %s\n ", strerror(errno));
+          }
+          else
+          {
+            if (write(STDOUT_FILENO, &buffer[i], sizeof(char)) < 0)
+              fprintf(stderr, "ERROR: Bad write to stdout, error number: %s\n ", strerror(errno));
+          }
+          i++;
+        }
       }
-      else if (current == '\3')
+      else if (pollfds[1].revents & (POLLHUP | POLLERR))
       {
-        if (write(sockfd, &buffer[i], sizeof(char) < 0))
-          fprintf(stderr, "ERROR: Bad write to STDOUT, error number: %s\n ", strerror(errno));
+        fprintf(stderr, "ERROR: Poll error, error number: %s\n ", strerror(errno));
+        break;
       }
-      else
-      {
-        write(STDOUT_FILENO, &buffer[i], sizeof(char));
-        n = write(sockfd, &buffer[i], sizeof(char));
-        if (n < 0)
-          fprintf(stderr, "ERROR: Bad write to STDOUT, error number: %s\n ", strerror(errno));
-      }
-      i++;
-    }
-    if (readSize < 0)
-    {
-      fprintf(stderr, "ERROR: Unable to Read, error number: %s\n ", strerror(errno));
-      exit(1);
     }
   }
 }
-
 int main(int argc, char **argv)
 {
   setTerminal();
@@ -319,7 +273,7 @@ int main(int argc, char **argv)
           {"port", required_argument, 0, 'p'},
           {"host", optional_argument, 0, 'h'},
           {"encrypt", optional_argument, 0, 'e'},
-          {"log", optional_argument, 0, 'l'},
+          {"log", required_argument, 0, 'l'},
       };
 
   int c;
@@ -346,8 +300,17 @@ int main(int argc, char **argv)
     }
     else if (c == 'l')
     {
-      if (optarg != NULL)
-        logFile = optarg;
+      logFlag = 1;
+      logFile = optarg;
+      logfd = creat(logFile, S_IRWXU);
+      //logfd = open(logFile, O_RDWR | O_APPEND | O_CREAT, 0666);
+      if (logfd < 0)
+      {
+        fprintf(stderr, "ERROR: Reading or writing to log, error number: %s\n", strerror(errno));
+        exit(1);
+      }
+      // if (optarg != NULL)
+      //   logFile = optarg;
     }
     else if (c == 'h')
     {
@@ -365,25 +328,9 @@ int main(int argc, char **argv)
       exit(1);
     }
   }
-  // initializePipes(pipeToChild, pipeToParent);
 
   createSocket();
-  writeToSocket();
+  newWriteSocket();
 
-  if (shellFlag)
-  {
-    pid = fork(); // Create new process and store ID.
-    if (pid == 0) // Child Process
-      shellProcess();
-    else if (pid > 0) // Parent Process
-      shellio();
-    else
-    {
-      fprintf(stderr, "error: %s", strerror(errno));
-      exit(1);
-    }
-  }
-  else
-    defaultio();
   exit(0);
 }

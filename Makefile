@@ -1,4 +1,4 @@
-#NAME: Matt Paterno
+#NAME: Matthew Paterno
 #ID: 904756085
 #EMAIL: mpaterno@g.ucla.edu
 
@@ -15,4 +15,4 @@ clean:
 	rm -f lab1b-client lab1b-server *.o *.txt *.tar.gz
 
 dist:
-	tar -czvf lab1a-904756085.tar.gz Makefile README lab1a.c
+	tar -czvf lab1b-904756085.tar.gz Makefile README lab1b-server.c lab1b-client.c

@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "/Users/mpaterno/Desktop/111-project-1a"
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"string.h": "c",
+			"socket.h": "c"
+		}
+	}
+}

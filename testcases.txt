@@ -1,0 +1,168 @@
+    RC=0 ... FAIL (RC=254)
+ERROR: shell did not properly execute commands
+Unable to open input file LOG_2
+   encrypted SENT commands ... PASS
+Unable to open input file LOG_2
+   encrypted shell output ... PASS
+   shell properly receives commands ... FAIL
+... checking use of mcrypt
+No calls to mcrypt_module_open
+No calls to mcrypt_generic
+No calls to mdecrypt_generic
+
+THIS SUBMISSION WILL USE NO SLIP-DAYS
+
+THE ONLY STUDENTS WHO WILL RECEIVE CREDIT FOR THIS SUBMISSION ARE:
+    904756085    MPATERNO@G.UCLA.EDU
+
+... cleaning up temporary files
+... removing test directory /u/ms/ugrad/paterno/CS111_test.paterno
+
+SUBMISSION lab1b-904756085.tar.gz ... FAILS sanity check with 12 errors
+[paterno@lnxsrv07 ~]$ exit
+logout
+
+
+Goodbye.
+^[[A^[[A^[[AConnection to lnxsrv07.seas.ucla.edu closed.
+vpn-128-97-244-214:project1b mpaterno$ scp lab1b-904756085.tar.gz paterno@lnxsrv07.seas.ucla.edu:
+paterno@lnxsrv07.seas.ucla.edu's password: 
+lab1b-904756085.tar.gz                        100% 3584    52.8KB/s   00:00    
+vpn-128-97-244-214:project1b mpaterno$ ssh paterno@lnxsrv07.seas.ucla.edu
+paterno@lnxsrv07.seas.ucla.edu's password: 
+Last login: Wed Oct 17 08:06:38 2018 from vpn-128-97-244-214.host.ucla.edu
+*****************************************************************************
+                        lnxsrv07.seas.ucla.edu RHEL 7
+*****************************************************************************
+	
+	RedHat 7 -- may not behave the same as other lnxsrv
+	Will be used by CS 35L, CS 33, CS 111, and CS 131
+
+*****************************************************************************
+*****************************************************************************
+*                                                                           *
+* SEASnet Computing Access                                                  *
+*                                                                           *
+* Priority is given both on the servers and in the student labs to those    *
+* students doing coursework. Computing support for research is provided by  *
+* each department.                                                          *
+*****************************************************************************
+* For assistance please contact help@seas.ucla.edu or call 206-6864.        *
+*****************************************************************************
+[paterno@lnxsrv07 ~]$ rm -r lab1b-client.c lab1b-server.c
+[paterno@lnxsrv07 ~]$ tar -xvf lab1b-904756085.tar.gz 
+Makefile
+./._README
+README
+./._lab1b-server.c
+lab1b-server.c
+./._lab1b-client.c
+lab1b-client.c
+[paterno@lnxsrv07 ~]$ ./P1B_check.sh 904756085
+... using test directory /u/ms/ugrad/paterno/CS111_test.paterno
+... extracting /u/ms/ugrad/paterno/lab1b-904756085.tar.gz
+Makefile
+./._README
+README
+./._lab1b-server.c
+lab1b-server.c
+./._lab1b-client.c
+lab1b-client.c
+... checking for README file
+    README ... OK
+... checking for submitter ID in README
+    single submitter: 904756085
+... checking for submitter email in README
+    single address: MPATERNO@G.UCLA.EDU ... OK
+... checking for submitter name in README
+    submitter(s): MATTHEW PATERNO ... OK
+... checking slip-day use in README
+    no SLIPDAYS: entry
+... checking for other expected files
+    Makefile ... OK
+    my.key ... NOT PRESENT
+... checking for other files of expected types
+    lab1b-client.c ... OK
+    lab1b-server.c ... OK
+... checking for required Make targets
+    Makefile target clean ... OK
+    Makefile target dist ... OK
+... checking for required compillation options
+    Makefile includes Wall ... OK
+    Makefile includes Wextra ... OK
+... building default target(s)
+    RC=0 ... OK
+    error output ... DUMP FOLLOWS:
+lab1b-server.c: In function ‘main’:
+lab1b-server.c:351:1: warning: control reaches end of non-void function [-Wreturn-type]
+ }
+ ^
+... checking make dist
+Makefile
+README
+lab1b-server.c
+lab1b-client.c
+    RC=0 ... OK
+    error output ...  NONE
+    lab1b-904756085.tar.gz ... OK
+ ... checking make clean
+    RC=0 ... OK
+    restored to freshly untar-ed state ... OK
+... redo default make
+    RC=0 ... OK
+    error output ... DUMP FOLLOWS:
+lab1b-server.c: In function ‘main’:
+lab1b-server.c:351:1: warning: control reaches end of non-void function [-Wreturn-type]
+ }
+ ^
+... checking for expected products
+    lab1b-client ... OK
+    lab1b-server ... OK
+... lab1b-client detects/reports bogus arguments
+    RC=1 ... OK
+        ./lab1b-client: unrecognized option '--bogus'
+ERROR: Unrecognized arguments, error number: Success
+ ... lab1b-server detects/reports bogus arguments
+    RC=1 ... OK
+        ./lab1b-server: unrecognized option '--bogus'
+ERROR: Unrecognized arguments, error number: Success
+ ... downloading pty_test.c from www.cs.ucla.edu/classes/cs111/Software
+... building pty_test
+-rwxr-xr-x 1 paterno msugrad 23464 Oct 17 08:10 pty_test
+... downloading logfilter.c from www.cs.ucla.edu/classes/cs111/Software
+... building logfilter
+-rwxr-xr-x 1 paterno msugrad 9176 Oct 17 08:10 logfilter
+... lab1b-client detects/reports system unwritable log file
+    RC=1 ... FAIL (RC=124)
+No error message to stderr for non-writable log file
+... testing trivial shell session
+    RC=0 ... FAIL (RC=254)
+ERROR: shell did not properly execute commands
+Unable to open input file LOG_1
+   log SENT commands ... FAIL
+Unable to open input file LOG_1
+   log REVEIVED commands ... FAIL
+   server reports shell exit status ... FAIL
+... testing encrypted shell session
+    RC=0 ... FAIL (RC=254)
+ERROR: shell did not properly execute commands
+Unable to open input file LOG_2
+   encrypted SENT commands ... PASS
+Unable to open input file LOG_2
+   encrypted shell output ... PASS
+   shell properly receives commands ... FAIL
+... checking use of mcrypt
+No calls to mcrypt_module_open
+No calls to mcrypt_generic
+No calls to mdecrypt_generic
+
+THIS SUBMISSION WILL USE NO SLIP-DAYS
+
+THE ONLY STUDENTS WHO WILL RECEIVE CREDIT FOR THIS SUBMISSION ARE:
+    904756085    MPATERNO@G.UCLA.EDU
+
+... cleaning up temporary files
+... removing test directory /u/ms/ugrad/paterno/CS111_test.paterno
+
+SUBMISSION lab1b-904756085.tar.gz ... FAILS sanity check with 12 errors
+[paterno@lnxsrv07 ~]$ 

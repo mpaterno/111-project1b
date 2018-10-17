@@ -78,7 +78,7 @@ struct pollfd pollfds[2];
 void configurePollfd()
 {
   pollfds[0].fd = newsockfd;
-  pollfds[0].events = POLLIN;
+  pollfds[0].events = POLLIN | POLLHUP | POLLERR;
   pollfds[1].fd = pipeToParent[0];
   pollfds[1].events = POLLIN | POLLHUP | POLLERR;
 }
@@ -101,7 +101,7 @@ void shellio() // Sending 0 and 1
     }
     else
     {
-      if (pollfds[0].revents & POLLIN)
+      if ((pollfds[0].revents) & POLLIN)
       {
         // Pipe input from socket to shell.
         int readSize = read(newsockfd, buffer, sizeof(char) * 256);
@@ -121,7 +121,8 @@ void shellio() // Sending 0 and 1
             char n = '\n';
             if (write(STDOUT_FILENO, crlf, 2 * sizeof(char)) < 0) // Write To Socket
               fprintf(stderr, "ERROR: Bad write to STDOUT, error number: %s\n ", strerror(errno));
-            write(pipeToChild[1], &n, sizeof(char));
+            if (write(pipeToChild[1], &n, sizeof(char)) < 0)
+              fprintf(stderr, "ERROR: Pipe write, error number: %s\n ", strerror(errno));
           }
           else if (current == '\4')
           {
@@ -133,8 +134,10 @@ void shellio() // Sending 0 and 1
           else
           {
 
-            write(STDOUT_FILENO, &buffer[i], sizeof(char)); // Write to Socket
-            write(pipeToChild[1], &buffer[i], sizeof(char));
+            if (write(STDOUT_FILENO, &buffer[i], sizeof(char)) < 0) // Write to Socket
+              fprintf(stderr, "ERROR: Bad write to STDOUT, error number: %s\n ", strerror(errno));
+            if (write(pipeToChild[1], &buffer[i], sizeof(char)) < 0)
+              fprintf(stderr, "ERROR: Bad write to Child Pipe, error number: %s\n ", strerror(errno));
           }
           i++;
         }
@@ -144,7 +147,7 @@ void shellio() // Sending 0 and 1
           exit(1);
         }
       }
-      else if (pollfds[1].revents & POLLIN)
+      else if ((pollfds[1].revents) & POLLIN)
       {
         // Read From Shell
         int readSize = read(pipeToParent[0], buffer, sizeof(char) * 256);
@@ -158,11 +161,19 @@ void shellio() // Sending 0 and 1
         {
           char current = buffer[i];
           if (current == '\n' || current == '\r')
-            write(newsockfd, crlf, sizeof(char));
-          // write(STDOUT_FILENO, crlf, 2 * sizeof(char)); // Write to Socket
+          {
+            if (write(newsockfd, crlf, 2 * sizeof(char)) < 0)
+              fprintf(stderr, "ERROR: Bad write to socket, error number: %s\n ", strerror(errno));
+            if (write(STDOUT_FILENO, crlf, 2 * sizeof(char)) < 0)
+              fprintf(stderr, "ERROR: Bad write to socket, error number: %s\n ", strerror(errno));
+          }
           else
-            write(newsockfd, &buffer[i], sizeof(char));
-          //write(STDOUT_FILENO, &buffer[i], sizeof(char)); // Write to Scoket
+          {
+            if (write(newsockfd, &buffer[i], sizeof(char)) < 0)
+              fprintf(stderr, "ERROR: Bad write to socket, error number: %s\n ", strerror(errno));
+            if (write(STDOUT_FILENO, &buffer[i], sizeof(char)) < 0)
+              fprintf(stderr, "ERROR: Bad write to socket, error number: %s\n ", strerror(errno));
+          }
           i++;
         }
       }
@@ -181,14 +192,15 @@ void shellProcess()
   close(pipeToChild[1]);
   close(pipeToParent[0]);
   // Reassign file descriptors.
-  dup2(pipeToChild[0], 0);
-  dup2(pipeToParent[1], 1);
+  dup2(pipeToChild[0], STDIN_FILENO);
+  dup2(pipeToParent[1], STDOUT_FILENO);
+  dup2(pipeToParent[1], STDERR_FILENO);
   // Close non-copies.
   close(pipeToChild[0]);
   close(pipeToParent[1]);
 
-  char *args[2] = {shellProgram, NULL};
-  if (execvp(shellProgram, args) == -1)
+  char *args[2] = {"/bin/bash", NULL};
+  if (execvp(args[0], args) == -1)
   { //execute shell
     fprintf(stderr, "ERROR: Bad shell execution, error number: %s\n ", strerror(errno));
     exit(1);
@@ -214,7 +226,9 @@ void restoreTerminal()
       fprintf(stderr, "SHELL EXIT SIGNAL=%d STATUS=%d\n", termSig, exitStatus);
     }
   }
-  shutdown(sockfd, 0);
+  shutdown(newsockfd, 0);
+  close(newsockfd);
+  close(sockfd);
 }
 
 void setTerminal()
@@ -327,7 +341,10 @@ int main(int argc, char **argv)
 
   // Connection Now Made, Create Child Process
 
+  initializePipes(pipeToChild, pipeToParent);
+
   pid = fork(); // Create new process and store ID.
+
   if (pid == 0) // Child Process
     shellProcess();
   else if (pid > 0) // Parent Process
